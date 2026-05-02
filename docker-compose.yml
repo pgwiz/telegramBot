@@ -1,0 +1,16 @@
+services:
+  bot:
+    build: .
+    image: telegram-bot:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      DATABASE_URL: sqlite:////app/data/bot.db
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('api.telegram.org', 443), timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3

@@ -1,78 +1,86 @@
+"""Inline-keyboard callback router."""
+from __future__ import annotations
+
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
-from database import init_db, User
 
+from db import session_scope
+from models import User
+from safety import safe_handler
+
+logger = logging.getLogger(__name__)
+
+
+async def _admin_files(query, context):
+    await query.message.reply_text("Admin files management — coming soon.")
+
+
+async def _admin_audit(query, context):
+    await query.message.reply_text("User audit interface — coming soon.")
+
+
+async def _premium_tcp(query, context):
+    await query.message.reply_text("TCP/Activator files for premium users.")
+
+
+async def _premium_unlimited(query, context):
+    await query.message.reply_text("Unlimited files access.")
+
+
+async def _group_tcp(query, context):
+    await query.message.reply_text("TCP files for your group.")
+
+
+async def _group_available(query, context):
+    await query.message.reply_text("Available files for your group.")
+
+
+async def _normal_basic(query, context):
+    await query.message.reply_text("Basic files menu.")
+
+
+async def _normal_summary(query, context):
+    await query.message.reply_text("Summary of your basic files.")
+
+
+_ROUTES = {
+    ("admin", "files"): _admin_files,
+    ("admin", "audit"): _admin_audit,
+    ("premium", "tcp"): _premium_tcp,
+    ("premium", "unlimited"): _premium_unlimited,
+    ("group", "tcp"): _group_tcp,
+    ("group", "available"): _group_available,
+    ("normal", "basic"): _normal_basic,
+    ("normal", "summary"): _normal_summary,
+}
+
+
+@safe_handler
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle callback queries from inline keyboard buttons"""
+    """Top-level inline-keyboard router. Format: ``<scope>_<action>[_...]``."""
     query = update.callback_query
     await query.answer()
-    
-    session = init_db()
-    user = session.query(User).filter_by(telegram_id=str(update.effective_user.id)).first()
-    
-    # Extract the callback data
-    callback_type, *params = query.data.split('_')
-    
-    try:
-        if callback_type == 'admin':
-            if user.role != 'admin':
-                await query.message.reply_text("Unauthorized access")
-                return
-            # Handle admin callbacks
-            if params[0] == 'files':
-                await handle_admin_files(query, context)
-            elif params[0] == 'audit':
-                await handle_admin_audit(query, context)
-                
-        elif callback_type == 'premium':
-            if user.role != 'premium':
-                await query.message.reply_text("Premium access required")
-                return
-            # Handle premium callbacks
-            if params[0] == 'tcp':
-                await handle_premium_tcp(query, context)
-            elif params[0] == 'unlimited':
-                await handle_premium_unlimited(query, context)
-                
-        elif callback_type == 'group':
-            if user.role != 'group':
-                await query.message.reply_text("Group access required")
-                return
-            # Handle group callbacks
-            if params[0] == 'tcp':
-                await handle_group_tcp(query, context)
-            elif params[0] == 'available':
-                await handle_group_available(query, context)
-                
-        elif callback_type == 'normal':
-            # Handle normal user callbacks
-            if params[0] == 'basic':
-                await handle_normal_basic(query, context)
-            elif params[0] == 'summary':
-                await handle_normal_summary(query, context)
-    
-    except Exception as e:
-        await query.message.reply_text("An error occurred. Please try again.")
-        logger.error(f"Callback error: {e}")
-    
-    finally:
-        session.close()
+    if not query.data:
+        return
 
-# Implement specific callback handlers here
-async def handle_admin_files(query, context):
-    await query.message.reply_text("Admin files management")
+    parts = query.data.split("_")
+    scope = parts[0] if parts else ""
+    action = parts[1] if len(parts) > 1 else ""
 
-async def handle_admin_audit(query, context):
-    await query.message.reply_text("User audit interface")
+    user_id = str(update.effective_user.id)
+    with session_scope() as session:
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        role = user.role if user else "normal"
 
-async def handle_premium_tcp(query, context):
-    await query.message.reply_text("TCP/Activator files for premium users")
+    if scope in {"admin", "premium", "group"} and role != scope and role != "admin":
+        await query.message.reply_text("Unauthorized for this action.")
+        return
 
-async def handle_premium_unlimited(query, context):
-    await query.message.reply_text("Unlimited files access")
-
-async def handle_group_tcp(query, context):
-    await query.message.reply_text("TCP files for group")
-
-async def handle_group_available(query, context):
-    await query.message.reply_text("Available files for group")
+    route = _ROUTES.get((scope, action))
+    if route is None:
+        logger.info("Unhandled callback: %s", query.data)
+        await query.message.reply_text("That button isn't wired up yet.")
+        return
+    await route(query, context)

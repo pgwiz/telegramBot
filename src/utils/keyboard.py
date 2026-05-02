@@ -1,11 +1,12 @@
 from telegram import InlineKeyboardButton
 
+
 async def get_category_keyboard(categories: list) -> list:
     keyboard = []
     for category in categories:
         keyboard.append([
             InlineKeyboardButton(
-                category.upper(), 
+                category.upper(),
                 callback_data=f"category_{category}"
             )
         ])

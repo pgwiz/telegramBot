@@ -1,38 +1,54 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
-from database import init_db, User, PromoCode
-from datetime import datetime, timedelta
-from utils.permissions import is_admin
-from utils.keyboard import get_admin_keyboard
+from __future__ import annotations
 
+from datetime import datetime, timedelta
+
+from telegram import InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
+
+from db import session_scope
+from models import PromoCode
+from safety import safe_handler
+from utils.keyboard import get_admin_keyboard
+from utils.permissions import is_admin
+
+
+@safe_handler
 async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update.effective_user.id):
         await update.message.reply_text("You don't have admin privileges.")
         return
-    
     keyboard = await get_admin_keyboard()
     await update.message.reply_text(
-        "Admin Panel - Select an action:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "Admin Panel — pick an action:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
+
+@safe_handler
 async def generate_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update.effective_user.id):
         return
-        
-    session = init_db()
-    code = f"PROMO_{datetime.now().strftime('%Y%m%d')}_{context.args[0]}"
-    validity_days = int(context.args[1])
-    
-    promo = PromoCode(
-        code=code,
-        validity_days=validity_days,
-        created_by=str(update.effective_user.id),
-        expiry_date=datetime.now() + timedelta(days=validity_days)
-    )
-    
-    session.add(promo)
-    session.commit()
-    session.close()
-    
-    await update.message.reply_text(f"Promo code generated: {code}")
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text("Usage: /generate_promo <label> <validity_days>")
+        return
+
+    label = args[0]
+    try:
+        validity_days = int(args[1])
+    except ValueError:
+        await update.message.reply_text("validity_days must be an integer.")
+        return
+
+    code = f"PROMO_{datetime.utcnow().strftime('%Y%m%d')}_{label}"
+    expiry = datetime.utcnow() + timedelta(days=validity_days)
+    with session_scope() as session:
+        session.add(
+            PromoCode(
+                code=code,
+                validity_days=validity_days,
+                created_by=str(update.effective_user.id),
+                expiry_date=expiry,
+            )
+        )
+    await update.message.reply_text(f"Promo code generated: `{code}`", parse_mode="Markdown")
