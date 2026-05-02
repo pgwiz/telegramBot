@@ -1,7 +1,5 @@
-# handlers/admin/__init__.py
+"""Telegram command and callback handlers.
 
-from .admin_handler import admin_handler
-from .promo_handler import generate_promo
-from .callback_handler import handle_callback
-
-__all__ = ['admin_handler', 'generate_promo', 'handle_callback']
+This package is intentionally lightweight — :mod:`bot` imports each handler
+explicitly so the dependency graph stays obvious.
+"""

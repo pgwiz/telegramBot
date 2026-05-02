@@ -1,21 +1,36 @@
+from __future__ import annotations
+
+import logging
+
 from telegram import Bot
-from database import init_db, User
-import os
 
-ACTION_GROUP_ID = os.getenv('TELEGRAM_ACTION_GROUP_ID')
+from settings import get_settings
 
-async def notify_action_group(bot: Bot, action_type: str, user_data: dict, details: str = None):
-    """Send notifications to action group for user actions"""
-    if not ACTION_GROUP_ID:
+logger = logging.getLogger(__name__)
+
+
+async def notify_action_group(
+    bot: Bot,
+    action_type: str,
+    user_data: dict,
+    details: str | None = None,
+) -> None:
+    """Send a structured notification to the configured action group."""
+    settings = get_settings()
+    chat_id = settings.action_group_id
+    if not chat_id:
+        logger.debug("No action group configured; skipping %s notification", action_type)
         return
-        
+
     message = (
         f"🔔 New {action_type.upper()} Request\n\n"
-        f"User: {user_data['name']}\n"
-        f"Profile: {user_data['profile_link']}\n"
+        f"User: {user_data.get('name', '?')}\n"
+        f"Profile: {user_data.get('profile_link', '?')}"
     )
-    
     if details:
-        message += f"\nDetails: {details}"
-        
-    await bot.send_message(chat_id=ACTION_GROUP_ID, text=message)
+        message += f"\n\nDetails: {details}"
+
+    try:
+        await bot.send_message(chat_id=chat_id, text=message)
+    except Exception:
+        logger.exception("Failed to notify action group %s", chat_id)

@@ -1,0 +1,24 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # long lines (handled by formatter)
+    "B008",  # default factory in args (FastAPI/Telegram patterns)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/bot.py" = ["E402"]  # entry point manipulates sys.path before imports
+"tests/conftest.py" = ["E402"]  # same: ensures src/ is importable for tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["bot", "handlers", "integrations", "autonomy", "utils"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-q"
